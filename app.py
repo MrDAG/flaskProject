@@ -1,122 +1,64 @@
-from urllib import request
-
-from flask import Flask, render_template, url_for, redirect
+from cloudipsp import Api, Checkout
+from flask import Flask, render_template, request, redirect
 from flask_sqlalchemy import SQLAlchemy
-from pydantic_core.core_schema import nullable_schema
-from datetime import datetime
+from sqlalchemy import nullsfirst
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///blog.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///shop.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
-class Article(db.Model):
+class Item(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False)
-    intro = db.Column(db.String(300), nullable=False)
-    price = db.Column(db.Integer, primary_key=True)
-    date = db.Column(db.DateTime, default=datetime.utcnow)
+    title = db.Column(db.String, nullable=False)
+    price = db.Column(db.Integer, nullable=False)
+    isActive = db.Column(db.Boolean, default=True)
 
     def __repr__(self):
-        return '<Article %r>' % self.id
+        return self.title
 
 @app.route('/')
-@app.route('/home')
 def index():
-    return render_template('index.html')
-@app.route('/accessories')
-def accessories():  # put application's code here
-    return render_template('accessories.html')
-
-@app.route('/payment')
-def payment():
-    return render_template('payment.html')
-
-
-@app.route('/posts')
-def posts():
-    articles = Article.query.order_by(Article.date.desc()).all()
-
-    return render_template("posts.html", articles=articles)
-
-@app.route('/posts/<int:id>')
-def post_detail(id):
-    article = Article.query.get(id)
-    return render_template("post_detail.html", article=article)
-
-@app.route('/posts/<int:id>/del')
-def post_delete(id):
-    article = Article.query.get_or_404(id)
-    try:
-        db.session.delete(article)
-        db.session.commit()
-        return redirect('/posts')
-    except:
-        return "При удалении статьи произошла ошибка"
-
-
-    return render_template("post_detail.html", article=article)
-
-def post_update(id):
-    article = Article.query.get_or_404(id)
-    try:
-        db.session.add(article)
-        db.session.commit()
-        return redirect('/posts')
-    except:
-        return "При удалении статьи произошла ошибка"
-
-
-    return render_template("post_detail.html", article=article)
-
+    items = Item.query.order_by(Item.price).all()
+    return render_template(('index.html'), data=items)
 
 @app.route('/about')
 def about():
     return render_template('about.html')
-
-@app.route('/posts/<int:id>/update', methods=['POST', 'GET'])
-def post_update(id):
-    article = Article.query.get(id)
+@app.route('/buy/<int:id>')
+def item_buy(id):
+    item = Item.query.get(id)
+    api = Api(merchant_id=1396424,
+              secret_key='test')
+    checkout = Checkout(api=api)
+    data = {
+        "currency": "KZT",
+        "amount": item.price
+    }
+    url = checkout.url(data).get('checkout_url')
+    return redirect(url)
+@app.route('/create', methods=['POST', 'GET'])
+def create():
     if request.method == "POST":
-        article.name = request.form['name']
-        article.intro = request.form['intro']
-        article.text = request.form['text']
-        article.price = request.form['price']
+        title = request.form['title']
+        price = request.form['price']
 
+        item = Item(title=title, price=price)
 
         try:
+            db.session.add(item)
             db.session.commit()
-            return redirect('/posts')
+            return redirect('/')
         except:
-            return "При редактировании статьи произошла ошибка"
+            return "Получилась ошибка"
     else:
-        return render_template('post_update.html', methods=['POST', 'GET'])
-
-@app.route('/posts/-article', methods=['POST', 'GET'])
-def create_article(id):
-     if request.method == "POST":
-         name = request.form['name']
-         intro = request.form['intro']
-         text = request.form['text']
-         price = request.form['price']
-
-         article = Article(name=name, intro=intro, text=text, price=price)
-
-         try:
-             db.session.add(article)
-             db.session.commit()
-             return redirect('/posts')
-         except:
-             return "При добавлении статьи произошла ошибка"
-     else:
-         return render_template('create-article.html', methods=['POST', 'GET'])
-
-
-@app.route('/')
-def hello_world():  # put application's code here
-    return "Hello World!"
+        return render_template('create.html')
+    return render_template('create.html')
 
 
 
-if __name__ == '__main__':
+
+
+
+if __name__ == '__app__':
     app.run(debug=True)
